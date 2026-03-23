@@ -14,10 +14,11 @@ import (
 	"github.com/miekg/dns"
 )
 
-// ipsetHandler is the ipset context.  ipsetMgr can be nil.
 type ipsetHandler struct {
-	ipsetMgr ipset.Manager
-	logger   *slog.Logger
+	ipsetMgr      ipset.Manager
+	logger        *slog.Logger
+	processCached bool
+	useDNSTTL     bool
 }
 
 // newIpsetHandler returns a new initialized [ipsetHandler].  It is not safe for
@@ -26,13 +27,17 @@ func newIpsetHandler(
 	ctx context.Context,
 	logger *slog.Logger,
 	ipsetList []string,
+	mikrotikConf *ipset.MikroTikConfig,
 ) (h *ipsetHandler, err error) {
 	h = &ipsetHandler{
-		logger: logger,
+		logger:        logger,
+		processCached: mikrotikConf != nil && mikrotikConf.URL != "",
+		useDNSTTL:     mikrotikConf != nil && mikrotikConf.UseDNSTTL,
 	}
 	conf := &ipset.Config{
-		Logger: logger,
-		Lines:  ipsetList,
+		Logger:   logger,
+		Lines:    ipsetList,
+		MikroTik: mikrotikConf,
 	}
 	h.ipsetMgr, err = ipset.NewManager(ctx, conf)
 	if errors.Is(err, os.ErrInvalid) ||
@@ -67,9 +72,9 @@ func (h *ipsetHandler) close() (err error) {
 }
 
 // dctxIsFilled returns true if dctx has enough information to process.
-func dctxIsFilled(dctx *dnsContext) (ok bool) {
+func dctxIsFilled(dctx *dnsContext, processCached bool) (ok bool) {
 	return dctx != nil &&
-		dctx.responseFromUpstream &&
+		(processCached || dctx.responseFromUpstream) &&
 		dctx.proxyCtx != nil &&
 		dctx.proxyCtx.Res != nil &&
 		dctx.proxyCtx.Req != nil &&
@@ -79,7 +84,7 @@ func dctxIsFilled(dctx *dnsContext) (ok bool) {
 // skipIpsetProcessing returns true when the ipset processing can be skipped for
 // this request.
 func (h *ipsetHandler) skipIpsetProcessing(dctx *dnsContext) (ok bool) {
-	if h == nil || h.ipsetMgr == nil || !dctxIsFilled(dctx) {
+	if h == nil || h.ipsetMgr == nil || !dctxIsFilled(dctx, h.processCached) {
 		return true
 	}
 
@@ -120,6 +125,24 @@ func ipsFromAnswer(ans []dns.RR) (ip4s, ip6s []net.IP) {
 	return ip4s, ip6s
 }
 
+// minTTLFromAnswer returns the minimum TTL from A and AAAA records in the DNS
+// answer section.  If there are no such records, it returns 0.
+func minTTLFromAnswer(ans []dns.RR) (ttl uint32) {
+	for _, rr := range ans {
+		switch rr.(type) {
+		case *dns.A, *dns.AAAA:
+			hdr := rr.Header()
+			if ttl == 0 || hdr.Ttl < ttl {
+				ttl = hdr.Ttl
+			}
+		default:
+			// Ignore non-address records.
+		}
+	}
+
+	return ttl
+}
+
 // process adds the resolved IP addresses to the domain's ipsets, if any.
 func (h *ipsetHandler) process(ctx context.Context, dctx *dnsContext) (rc resultCode) {
 	h.logger.DebugContext(ctx, "started processing")
@@ -135,7 +158,14 @@ func (h *ipsetHandler) process(ctx context.Context, dctx *dnsContext) (rc result
 	host = strings.ToLower(host)
 
 	ip4s, ip6s := ipsFromAnswer(dctx.proxyCtx.Res.Answer)
-	n, err := h.ipsetMgr.Add(ctx, host, ip4s, ip6s)
+
+	// Extract minimum TTL from the DNS response for MikroTik use_dns_ttl.
+	var ttl uint32
+	if h.useDNSTTL {
+		ttl = minTTLFromAnswer(dctx.proxyCtx.Res.Answer)
+	}
+
+	n, err := h.ipsetMgr.Add(ctx, host, ip4s, ip6s, ttl)
 	if err != nil {
 		// Consider ipset errors non-critical to the request.
 		h.logger.ErrorContext(ctx, "adding host ips", slogutil.KeyError, err)

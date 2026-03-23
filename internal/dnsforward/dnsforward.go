@@ -632,13 +632,19 @@ func (s *Server) prepareLocalResolvers(ctx context.Context) (uc *proxy.UpstreamC
 // the primary DNS proxy instance.  It assumes s.serverLock is locked or the
 // Server not running.
 func (s *Server) prepareInternalDNS(ctx context.Context) (err error) {
+	// Create ipsets if auto-creation is enabled
+	err = s.createIpsets(ctx, s.conf.IpsetCreate)
+	if err != nil {
+		return fmt.Errorf("creating ipsets: %w", err)
+	}
+
 	ipsetList, err := s.prepareIpsetListSettings(ctx)
 	if err != nil {
 		return fmt.Errorf("preparing ipset settings: %w", err)
 	}
 
 	ipsetLogger := s.baseLogger.With(slogutil.KeyPrefix, "ipset")
-	s.ipset, err = newIpsetHandler(context.TODO(), ipsetLogger, ipsetList)
+	s.ipset, err = newIpsetHandler(context.TODO(), ipsetLogger, ipsetList, s.conf.MikroTik)
 	if err != nil {
 		// Don't wrap the error, because it's informative enough as is.
 		return err

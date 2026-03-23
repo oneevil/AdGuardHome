@@ -334,6 +334,26 @@ export type DnsConfigData = {
     cache_ttl_max?: number;
     cache_ttl_min?: number;
     cache_optimistic?: boolean;
+    ipset?: string[];
+    ipset_file?: string;
+    ipset_create?: {
+        enabled: boolean;
+        sets: Array<{
+            name: string;
+            type: string;
+            family: string;
+            timeout: number;
+        }>;
+    } | null;
+    mikrotik?: {
+        url: string;
+        username: string;
+        password: string;
+        insecure: boolean;
+        timeout: number;
+        ipv6: boolean;
+        use_dns_ttl: boolean;
+    } | null;
 };
 
 export type FilteringData = {

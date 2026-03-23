@@ -526,7 +526,7 @@ func (m *manager) addToSets(
 }
 
 // Add implements the [Manager] interface for *manager.
-func (m *manager) Add(ctx context.Context, host string, ip4s, ip6s []net.IP) (n int, err error) {
+func (m *manager) Add(ctx context.Context, host string, ip4s, ip6s []net.IP, _ uint32) (n int, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

@@ -12,7 +12,7 @@ import (
 // TODO(a.garipov): Perhaps generalize this into some kind of a NetFilter type,
 // since ipset is exclusive to Linux?
 type Manager interface {
-	Add(ctx context.Context, host string, ip4s, ip6s []net.IP) (n int, err error)
+	Add(ctx context.Context, host string, ip4s, ip6s []net.IP, ttl uint32) (n int, err error)
 	Close() (err error)
 }
 
@@ -28,16 +28,26 @@ type Config struct {
 	//
 	// Lines must not contain any blank lines or comments.
 	Lines []string
+
+	// MikroTik, if not nil and URL is set, enables the MikroTik REST API
+	// backend instead of the Linux ipset backend.
+	MikroTik *MikroTikConfig
 }
 
-// NewManager returns a new ipset manager.  IPv4 addresses are added to an ipset
-// with an ipv4 family; IPv6 addresses, to an ipv6 ipset.  ipset must exist.
+// NewManager returns a new ipset manager.  If MikroTik configuration is
+// provided, the MikroTik REST API backend is used.  Otherwise, the OS-specific
+// ipset backend is used (Linux only).
 //
 // If conf.Lines is empty, mgr and err are nil.  The error's chain contains
 // [errors.ErrUnsupported] if current OS is not supported.
 func NewManager(ctx context.Context, conf *Config) (mgr Manager, err error) {
 	if len(conf.Lines) == 0 {
 		return nil, nil
+	}
+
+	// Use MikroTik backend if configured.
+	if conf.MikroTik != nil && conf.MikroTik.URL != "" {
+		return newMikrotikManager(ctx, conf)
 	}
 
 	return newManager(ctx, conf)

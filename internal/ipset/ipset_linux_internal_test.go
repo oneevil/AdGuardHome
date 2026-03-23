@@ -110,7 +110,7 @@ func TestManager_Add(t *testing.T) {
 		0x00, 0x00, 0x56, 0x78,
 	}
 
-	n, err := m.Add(testutil.ContextWithTimeout(t, testTimeout), "example.net", []net.IP{ip4}, nil)
+	n, err := m.Add(testutil.ContextWithTimeout(t, testTimeout), "example.net", []net.IP{ip4}, nil, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, n)
@@ -120,7 +120,7 @@ func TestManager_Add(t *testing.T) {
 	gotIP4 := ipv4Entries[0].IP.Value
 	assert.Equal(t, ip4, gotIP4)
 
-	n, err = m.Add(testutil.ContextWithTimeout(t, testTimeout), "example.biz", nil, []net.IP{ip6})
+	n, err = m.Add(testutil.ContextWithTimeout(t, testTimeout), "example.biz", nil, []net.IP{ip6}, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, n)

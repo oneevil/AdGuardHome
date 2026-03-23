@@ -18,7 +18,7 @@ type fakeIpsetMgr struct {
 }
 
 // Add implements the aghnet.IpsetManager interface for *fakeIpsetMgr.
-func (m *fakeIpsetMgr) Add(_ context.Context, host string, ip4s, ip6s []net.IP) (n int, err error) {
+func (m *fakeIpsetMgr) Add(_ context.Context, host string, ip4s, ip6s []net.IP, _ uint32) (n int, err error) {
 	m.ip4s = append(m.ip4s, ip4s...)
 	m.ip6s = append(m.ip6s, ip6s...)
 
